@@ -16,3 +16,4 @@ class User(Base):
     bio: Mapped[Optional[str]] = mapped_column(TEXT, nullable=True)
     online: Mapped[bool] = mapped_column(server_default=text('false'))
     last_online = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
+    password: Mapped[str] = mapped_column(VARCHAR(256), nullable=False)

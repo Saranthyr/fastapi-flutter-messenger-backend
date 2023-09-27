@@ -85,26 +85,21 @@ async def register(username: Annotated[str,
                                     User.username,
                                     User.password).where(User.username == username)).mappings().one_or_none()
 
-    return {'id': result['id'],
-            'username': result['username'],
-            'password': result['password']}
+    return MessageResponse(message='Registered'), 200
 
 
 @app.post('/login', response_model=Union[MessageResponse, AccessTokenResponse])
-async def login(username: Annotated[str,
-                Form(pattern="^[\w]{8,32}$")],
-                password: Annotated[str,
-                Form(pattern="^[\w]{8,64}$")]):
+async def login(form_data: UserCreate = Depends(UserCreate.as_form)):
     session = Session()
 
-    query = select(User.id, User.password).where(User.username == username)
+    query = select(User.id, User.password).where(User.username == form_data.username)
 
     data = session.execute(query).mappings().one_or_none()
 
     try:
         if data is None:
             raise ValueError
-        elif not check_password_hash(data['password'], password):
+        elif not check_password_hash(data['password'], form_data.password):
             raise ValueError
         else:
             auth_token = jwt.encode({'id': str(data['id']),
@@ -124,24 +119,13 @@ async def login(username: Annotated[str,
         return MessageResponse(message='Login or password are incorrect')
 
 
-@protect_route
 @app.post('/user_info', response_model=Union[MessageResponse, UserDataResponse])
-@protect_route
+@protect_route()
 async def user_info(token: str = Depends(oauth2_scheme)):
-    token = f.decrypt(token).decode(encoding='utf-8')
-    try:
-        token = jwt.decode(token, str(secret), algorithms='HS384')
-        session = Session()
-        data = session.execute(select(User.id,
-                                      User.username,
-                                      User.last_online,
-                                      User.online).where(User.id == token['id'])).mappings().one_or_none()
-    except jwt.JWTError or jwt.ExpiredSignatureError or jwt.JWTClaimsError:
-        return MessageResponse(message='Token error')
-    return UserDataResponse(user_id=str(data['id']),
-                            username=data['username'],
-                            online=data['online'],
-                            last_online=data['last_online'])
+    return UserDataResponse(user_id=str(token['id']),
+                            username=token['username'],
+                            online=token['online'],
+                            last_online=token['last_online'])
 
 
 # @app.post('/post_message')

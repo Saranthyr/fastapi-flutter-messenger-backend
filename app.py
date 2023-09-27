@@ -1,35 +1,25 @@
 import os
 import uuid
 from typing import Union, Annotated
-from base64 import b64encode
 import time
 from datetime import timedelta, datetime
 
-from dotenv import load_dotenv
-from sqlalchemy import create_engine, select, and_, exc, update
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select, and_, exc, update
 from fastapi import FastAPI, Form, Depends, Request
 from fastapi.security import OAuth2PasswordBearer
 from werkzeug.security import generate_password_hash, check_password_hash
 from jose import jwt
-from cryptography.fernet import Fernet
 from psycopg import errors
 
+from config import secret, f
+from db import Session
 from models import User
 from pydantic_forms import UserCreate
 from pydantic_responses import MessageResponse, AccessTokenResponse, UserDataResponse
+from security import protect_route
 
 app = FastAPI()
-load_dotenv()
 
-engine = create_engine(f'postgresql+psycopg://{os.environ["DB_USER"]}:{os.environ["DB_PASSWORD"]}@'
-                       f'{os.environ["DB_HOST"]}:{os.environ["DB_PORT"]}/{os.environ["DB_NAME"]}')
-Session = sessionmaker(engine, autoflush=False)
-
-secret = b'A\xa3\x8c\x9a>\x96\xd6njF\x8a%j\x9bil\xfe\x8aq\xd6\xe8\x87\xfe:\xea\xf7\x18q\xc3\xaeK\x88\xe0\x91\xae\x85\
-xcd\xcf\xd0q:\xb1\xf3\xb5\x16\x164\xe3"/\x10_\xb5\xff\x8c\xae\x85\x86\xc8\xdbI)\x98['
-secret = b64encode(secret)
-f = Fernet(b'zJ0m06YrD4D0YNqoVVOxF33FEbBQ0FPdCQPeKhQ76rg=')
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='login')
 
@@ -134,7 +124,9 @@ async def login(username: Annotated[str,
         return MessageResponse(message='Login or password are incorrect')
 
 
+@protect_route
 @app.post('/user_info', response_model=Union[MessageResponse, UserDataResponse])
+@protect_route
 async def user_info(token: str = Depends(oauth2_scheme)):
     token = f.decrypt(token).decode(encoding='utf-8')
     try:
@@ -153,4 +145,5 @@ async def user_info(token: str = Depends(oauth2_scheme)):
 
 
 # @app.post('/post_message')
-# async def post_message(message_text)
+# async def post_message(token: str = Depends(oauth2_scheme),
+#                        message_text)

@@ -1,0 +1,9 @@
+from base64 import b64encode
+from cryptography.fernet import Fernet
+from dotenv import load_dotenv
+
+secret = b'A\xa3\x8c\x9a>\x96\xd6njF\x8a%j\x9bil\xfe\x8aq\xd6\xe8\x87\xfe:\xea\xf7\x18q\xc3\xaeK\x88\xe0\x91\xae\x85\
+xcd\xcf\xd0q:\xb1\xf3\xb5\x16\x164\xe3"/\x10_\xb5\xff\x8c\xae\x85\x86\xc8\xdbI)\x98['
+secret = b64encode(secret)
+f = Fernet(b'zJ0m06YrD4D0YNqoVVOxF33FEbBQ0FPdCQPeKhQ76rg=')
+load_dotenv()

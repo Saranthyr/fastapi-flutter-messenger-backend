@@ -6,9 +6,10 @@ import time
 from datetime import timedelta, datetime
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, select, and_, exc
+from sqlalchemy import create_engine, select, and_, exc, update
 from sqlalchemy.orm import sessionmaker
 from fastapi import FastAPI, Form, Depends, Request
+from fastapi.security import OAuth2PasswordBearer
 from werkzeug.security import generate_password_hash, check_password_hash
 from jose import jwt
 from cryptography.fernet import Fernet
@@ -16,7 +17,7 @@ from psycopg import errors
 
 from models import User
 from pydantic_forms import UserCreate
-from pydantic_responses import MessageResponse
+from pydantic_responses import MessageResponse, AccessTokenResponse, UserDataResponse
 
 app = FastAPI()
 load_dotenv()
@@ -28,8 +29,9 @@ Session = sessionmaker(engine, autoflush=False)
 secret = b'A\xa3\x8c\x9a>\x96\xd6njF\x8a%j\x9bil\xfe\x8aq\xd6\xe8\x87\xfe:\xea\xf7\x18q\xc3\xaeK\x88\xe0\x91\xae\x85\
 xcd\xcf\xd0q:\xb1\xf3\xb5\x16\x164\xe3"/\x10_\xb5\xff\x8c\xae\x85\x86\xc8\xdbI)\x98['
 secret = b64encode(secret)
-key = Fernet.generate_key()
-f = Fernet(key)
+f = Fernet(b'zJ0m06YrD4D0YNqoVVOxF33FEbBQ0FPdCQPeKhQ76rg=')
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl='login')
 
 
 @app.get('/')
@@ -68,7 +70,7 @@ async def even_odd(number: Union[int, float]):
             return f'Number {number} is not int'
 
 
-@app.post('/register')
+@app.post('/register', response_model=MessageResponse)
 async def register(username: Annotated[str,
                    Form(pattern="^[\w]{8,32}$")],
                    password: Annotated[str,
@@ -87,7 +89,7 @@ async def register(username: Annotated[str,
         except exc.IntegrityError as e:
             assert isinstance(e.orig, errors.UniqueViolation)
             session.rollback()
-            return {'message': 'This username is unavailable.'}, 422
+            return MessageResponse(message='This username is unavailable.'), 422
 
     result = session.execute(select(User.id,
                                     User.username,
@@ -98,16 +100,16 @@ async def register(username: Annotated[str,
             'password': result['password']}
 
 
-@app.post('/login')
+@app.post('/login', response_model=Union[MessageResponse, AccessTokenResponse])
 async def login(username: Annotated[str,
                 Form(pattern="^[\w]{8,32}$")],
                 password: Annotated[str,
                 Form(pattern="^[\w]{8,64}$")]):
     session = Session()
 
-    query = session.execute(select(User.id, User.password).where(User.username == username)).mappings()
+    query = select(User.id, User.password).where(User.username == username)
 
-    data = query.one_or_none()
+    data = session.execute(query).mappings().one_or_none()
 
     try:
         if data is None:
@@ -123,6 +125,32 @@ async def login(username: Annotated[str,
                                     str(secret),
                                     algorithm='HS384')
             auth_token = f.encrypt(bytes(auth_token, encoding='utf-8'))
-            return {'token': auth_token}
+            session.execute(update(User).where(User.id == data['id']).values(online=True,
+                                                                             last_online=datetime.utcnow()))
+            session.commit()
+            session.close()
+            return AccessTokenResponse(access_token=auth_token)
     except ValueError:
-        return {'message': 'Login or password are incorrect'}
+        return MessageResponse(message='Login or password are incorrect')
+
+
+@app.post('/user_info', response_model=Union[MessageResponse, UserDataResponse])
+async def user_info(token: str = Depends(oauth2_scheme)):
+    token = f.decrypt(token).decode(encoding='utf-8')
+    try:
+        token = jwt.decode(token, str(secret), algorithms='HS384')
+        session = Session()
+        data = session.execute(select(User.id,
+                                      User.username,
+                                      User.last_online,
+                                      User.online).where(User.id == token['id'])).mappings().one_or_none()
+    except jwt.JWTError or jwt.ExpiredSignatureError or jwt.JWTClaimsError:
+        return MessageResponse(message='Token error')
+    return UserDataResponse(user_id=str(data['id']),
+                            username=data['username'],
+                            online=data['online'],
+                            last_online=data['last_online'])
+
+
+# @app.post('/post_message')
+# async def post_message(message_text)

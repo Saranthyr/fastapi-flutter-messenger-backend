@@ -1,8 +1,10 @@
+from typing import List
+
 from pydantic import BaseModel
-from fastapi import Form
+from fastapi import Form, File, UploadFile
 
 
-class UserCreate(BaseModel):
+class UserCreateForm(BaseModel):
     username: str
     password: str
 
@@ -11,4 +13,21 @@ class UserCreate(BaseModel):
                 username: str = Form(...),
                 password: str = Form(...)
                 ):
-        return cls(username=username,password=password)
+        return cls(username=username,
+                   password=password)
+
+
+class UserLoginForm(UserCreateForm):
+    pass
+
+
+class MessageForm(BaseModel):
+    message: str
+    files: list[UploadFile]
+
+    @classmethod
+    def as_form(cls,
+                message: str = Form(...),
+                files: list[UploadFile] = File()):
+        return cls(message=message,
+                   files=files)

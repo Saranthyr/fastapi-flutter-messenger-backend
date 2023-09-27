@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional, List
-from sqlalchemy import text, ForeignKey, Constraint
+from sqlalchemy import text, ForeignKey, Constraint, ForeignKeyConstraint
 from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped, relationship
 from sqlalchemy.dialects.postgresql import UUID, VARCHAR, INTEGER, BOOLEAN, TEXT, TIMESTAMP, DATE, BYTEA, ARRAY
 
@@ -30,7 +30,7 @@ class File(Base):
     filename: Mapped[str] = mapped_column()
     mime: Mapped[str] = mapped_column()
     created_at = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
-    contents: Mapped[bytearray] = mapped_column(BYTEA, nullable=False)
+    contents: Mapped[str] = mapped_column(TEXT, nullable=False)
 
 
 class Message(Base):
@@ -42,3 +42,6 @@ class Message(Base):
     attachments: Mapped[List[uuid.UUID]] = mapped_column(ARRAY(UUID), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates='messages')
+    file = relationship('File',
+                        primaryjoin='File.id == any_(foreign(Message.attachments))',
+                        uselist=True)

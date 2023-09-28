@@ -1,7 +1,7 @@
 import datetime
-from typing import List, Annotated
+from typing import List
 
-from pydantic import BaseModel, Strict
+from pydantic import BaseModel
 
 
 class FileResponse(BaseModel):
@@ -9,11 +9,13 @@ class FileResponse(BaseModel):
     filename: str
     mime: str
     contents: str
+    created_at: datetime.datetime
 
 class MessageResponse(BaseModel):
     send_by: str
     contents: str
     attachments: List[FileResponse]
+    send_at: datetime.datetime
 
 
 class ServiceMessageResponse(BaseModel):

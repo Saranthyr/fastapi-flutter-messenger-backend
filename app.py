@@ -122,7 +122,7 @@ async def login(form_data: UserLoginForm = Depends(UserLoginForm.as_form)):
               ServiceMessageResponse,
               UserDataResponse])
 @protect_route()
-async def user_info(token: str = Depends(oauth2_scheme)):
+async def user_info(token: Union[str, dict] = Depends(oauth2_scheme)):
     return UserDataResponse(user_id=str(token['id']),
                             username=token['username'],
                             online=token['online'],
@@ -132,7 +132,7 @@ async def user_info(token: str = Depends(oauth2_scheme)):
 @app.post('/post_message',
           response_model=ServiceMessageResponse)
 @protect_route()
-async def post_message(token: str = Depends(oauth2_scheme),
+async def post_message(token: Union[str, dict] = Depends(oauth2_scheme),
                        form_data: MessageForm = Depends(MessageForm.as_form)):
     session = Session()
     attachments = []
@@ -159,15 +159,17 @@ async def post_message(token: str = Depends(oauth2_scheme),
 @app.get('/message/{id}')
 @protect_route()
 async def get_message(id: uuid.UUID,
-                      token: str = Depends(oauth2_scheme)):
+                      token: Union[str, dict] = Depends(oauth2_scheme)):
     session = Session()
     data = session.execute(select(Message.send_by,
                                   Message.contents,
-                                  Message.attachments).where(Message.id == id)).mappings().one_or_none()
+                                  Message.attachments,
+                                  Message.send_at).where(Message.id == id)).mappings().one_or_none()
     attachments = session.execute(select(File.id,
                                          File.filename,
                                          File.mime,
-                                         File.contents).where(File.id.in_(data['attachments']))).mappings().all()
+                                         File.contents,
+                                         File.created_at).where(File.id.in_(data['attachments']))).mappings().all()
     data = dict(data)
     for i in range(len(attachments)):
         attachments[i] = dict(attachments[i])
@@ -180,10 +182,20 @@ async def get_message(id: uuid.UUID,
         attachments.append(FileResponse(id=data['attachments'][i]['id'],
                                         filename=data['attachments'][i]['id'],
                                         mime=data['attachments'][i]['mime'],
-                                        contents=data['attachments'][i]['contents']))
+                                        contents=data['attachments'][i]['contents'],
+                                        created_at=data['attachments'][i]['created_at']))
     try:
         return MessageResponse(send_by=data['send_by'],
                                contents=data['contents'],
+                               send_at=data['send_at'],
                                attachments=attachments)
     except Exception as e:
         print(e.__name__)
+
+
+@app.get('/message', response_model=ServiceMessageResponse)
+@protect_route()
+async def get_latest_message(token: Union[str, dict] = Depends(oauth2_scheme)):
+    session = Session()
+    data = session.execute(select(Message.id).where(Message.send_by == token['id']).order_by(Message.send_at)).first()
+    return ServiceMessageResponse(message=data['id'])

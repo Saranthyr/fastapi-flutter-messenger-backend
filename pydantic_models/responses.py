@@ -11,10 +11,11 @@ class FileResponse(BaseModel):
     contents: str
     created_at: datetime.datetime
 
+
 class MessageResponse(BaseModel):
     send_by: str
     contents: str
-    attachments: List[FileResponse]
+    attachments: List[str]
     send_at: datetime.datetime
 
 

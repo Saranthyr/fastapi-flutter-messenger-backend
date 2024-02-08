@@ -1,5 +1,6 @@
 import datetime
 from typing import List
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -12,10 +13,14 @@ class FileResponse(BaseModel):
     created_at: datetime.datetime
 
 
+class MessagesResponse(BaseModel):
+    messages: List['MessageResponse']
+
+
 class MessageResponse(BaseModel):
     send_by: str
     contents: str
-    attachments: List[str]
+    attachments: List[UUID] | None
     send_at: datetime.datetime
 
 

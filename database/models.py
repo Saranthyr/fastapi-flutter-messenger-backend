@@ -39,7 +39,8 @@ class Message(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
     send_by: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
     contents: Mapped[str] = mapped_column(TEXT)
-    attachments: Mapped[List[uuid.UUID]] = mapped_column(ARRAY(UUID), nullable=True)
+    attachments: Mapped[List[uuid.UUID]] = mapped_column(ARRAY(UUID),
+                                                         nullable=True)
     send_at = mapped_column(TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"))
 
     user: Mapped["User"] = relationship(back_populates='messages')

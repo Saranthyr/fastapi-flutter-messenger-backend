@@ -7,6 +7,5 @@ engine = create_engine(f'postgresql+psycopg://{os.environ["DB_USER"]}:{os.enviro
                        f'{os.environ["DB_HOST"]}:{os.environ["DB_PORT"]}/{os.environ["DB_NAME"]}',
                        pool_size=20,
                        max_overflow=0,
-                       pool_pre_ping=True,
-                       echo=True)
+                       pool_pre_ping=True)
 Session = sessionmaker(engine, autoflush=False)

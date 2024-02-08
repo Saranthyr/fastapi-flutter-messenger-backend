@@ -1,33 +1,24 @@
-from typing import List
+import logging
+from dataclasses import dataclass
+from typing import List, Union
+from typing_extensions import Annotated
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from fastapi import Form, File, UploadFile
 
 
-class UserCreateForm(BaseModel):
-    username: str
-    password: str
-
-    @classmethod
-    def as_form(cls,
-                username: str = Form(...),
-                password: str = Form(...)
-                ):
-        return cls(username=username,
-                   password=password)
+@dataclass
+class UserCreateForm:
+    username: str = Form(...)
+    password: str = Form(...)
 
 
+@dataclass
 class UserLoginForm(UserCreateForm):
     pass
 
 
-class MessageForm(BaseModel):
-    message: str
-    files: list[UploadFile]
-
-    @classmethod
-    def as_form(cls,
-                message: str = Form(...),
-                files: list[UploadFile] = File()):
-        return cls(message=message,
-                   files=files)
+@dataclass
+class MessageForm:
+    message: str = Form(...)
+    files: Union[List[UploadFile], None] = File(None)

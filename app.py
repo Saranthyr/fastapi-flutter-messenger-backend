@@ -22,7 +22,7 @@ from database import Session, engine
 from database.models import User, Message, File
 from pydantic_models.forms import UserCreateForm, UserLoginForm, MessageForm
 from pydantic_models.responses import ServiceMessageResponse, AccessTokenResponse, UserDataResponse, MessageResponse, \
-    FileResponse
+    FileResponse, MessagesResponse
 from security import protect_route, create_hash, check_hash
 
 app = FastAPI()
@@ -33,7 +33,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl='login')
 
 @app.post('/register',
           response_model=ServiceMessageResponse)
-async def register(form: UserCreateForm = Depends(UserCreateForm.as_form)) -> JSONResponse:
+async def register(form: UserCreateForm = Depends()) -> JSONResponse:
     user_id = uuid4()
     password_hash = create_hash(form.password)
     user = User(
@@ -58,7 +58,7 @@ async def register(form: UserCreateForm = Depends(UserCreateForm.as_form)) -> JS
           response_model=Union[
               ServiceMessageResponse,
               AccessTokenResponse])
-async def login(form: UserLoginForm = Depends(UserLoginForm.as_form)) -> JSONResponse:
+async def login(form: UserLoginForm = Depends()) -> JSONResponse:
     with engine.connect() as conn:
         res = conn.execute(text("select users.id, users.password "
                                 "from users "
@@ -110,75 +110,53 @@ async def user_info(token: Union[str, dict] = Depends(oauth2_scheme)):
           response_model=ServiceMessageResponse)
 @protect_route()
 async def post_message(token: Union[str, dict] = Depends(oauth2_scheme),
-                       form_data: MessageForm = Depends(MessageForm.as_form)):
+                       form: MessageForm = Depends()):
     with Session() as session:
-        attachments = []
-        for file in form_data.files:
-            file_id = uuid4()
-            contents = b64encode(file.file.read())
-            new_file = File(id=file_id,
-                            filename=file.filename,
-                            mime=file.content_type,
-                            contents=str(contents))
-            session.add(new_file)
-            session.flush()
-            attachments.append(file_id)
         message = Message(id=uuid4(),
                           send_by=token['id'],
-                          contents=form_data.message,
-                          attachments=attachments)
+                          contents=form.message)
+        if form.files:
+            attachments = []
+            for file in form.files:
+                file_id = uuid4()
+                contents = b64encode(file.file.read())
+                new_file = File(id=file_id,
+                                filename=file.filename,
+                                mime=file.content_type,
+                                contents=contents.decode('utf-8'))
+                session.add(new_file)
+                session.flush()
+                attachments.append(file_id)
+            message.attachments = attachments
         session.add(message)
-        session.commit()
-    return JSONResponse(None)
+        try:
+            session.commit()
+            return response(None)
+        except Exception as e:
+            session.rollback()
+            return response(None, 500)
 
 
-@app.get('/message/{id}')
+@app.get('/messages')
 @protect_route()
-async def get_message(id: UUID,
-                      token: Union[str, dict] = Depends(oauth2_scheme)):
+async def get_message(token: Union[str, dict] = Depends(oauth2_scheme)):
     with engine.connect() as conn:
-        message = conn.execute(text('select users.username, '
-                                    'messages.contents, '
-                                    'messages.attachments, '
-                                    'messages.send_at '
-                                    'from messages '
-                                    'join users on messages.send_by = users.id '
-                                    'where messages.id = :id'),
-                               {'id': id}).mappings().one_or_none()
-        attachments = text('select files.id, '
-                                        'files.filename, '
-                                        'files.mime, '
-                                        'files.contents, '
-                                        'files.created_at '
-                                        'from files '
-                                        'where files.id in (:attachments)')
-        attachments = attachments.bindparams(bindparam('attachments', [attachment for attachment in message.attachments],
-                                                       type_=ARRAY(uuid)))
-        attachments = conn.execute(attachments).mappings().all()
-        for attachment in attachments:
-            attachment.id = str(attachment.id)
-        message.attachments = attachments
-        message.send_by = str(message.send_by)
-        return response(MessageResponse(send_by=message.users.username,
-                                        contents=message.contents,
-                                        attachments=message.attachments,
-                                        send_at=message.send_at))
-    # attachments = []
-    # for i in range(len(data['attachments'])):
-    #     data['attachments'][i]['id'] = str(data['attachments'][i]['id'])
-    #     data['attachments'][i]['contents'] = str(data['attachments'][i]['contents'])
-    #     attachments.append(FileResponse(id=data['attachments'][i]['id'],
-    #                                     filename=data['attachments'][i]['id'],
-    #                                     mime=data['attachments'][i]['mime'],
-    #                                     contents=data['attachments'][i]['contents'],
-    #                                     created_at=data['attachments'][i]['created_at']))
-    # try:
-    #     return MessageResponse(send_by=data['send_by'],
-    #                            contents=data['contents'],
-    #                            send_at=data['send_at'],
-    #                            attachments=attachments)
-    # except Exception as e:
-    #     print(e.__name__)
+        messages = conn.execute(text('select users.username, '
+                                     'messages.contents, '
+                                     'messages.attachments, '
+                                     'messages.send_at '
+                                     'from messages '
+                                     'join users on messages.send_by = users.id '
+                                     'where messages.send_by = :send_by'),
+                                {'send_by': token['id']}).mappings().all()
+        resp = []
+        for message in messages:
+            message = MessageResponse(send_by=message.username,
+                                      contents=message.contents,
+                                      attachments=message.attachments,
+                                      send_at=message.send_at)
+            resp.append(message)
+        return response(MessagesResponse(messages=resp))
 
 
 @app.get('/message', response_model=ServiceMessageResponse)
